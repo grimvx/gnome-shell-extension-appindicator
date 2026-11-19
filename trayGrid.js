@@ -39,9 +39,50 @@ import {
 } from './trayGridLayout.js';
 
 const GRID_BUTTON_ROLE = 'appindicator-tray-grid';
+// One value for both axes. Extra horizontal padding used to live only in
+// the panel button, so rows looked tighter than columns.
+const GRID_CELL_SPACING = 8;
 
 const trackedIcons = new Set();
+const gridAlign = new WeakMap();
+const gridExpand = new WeakMap();
 let placement = null;
+
+function pinToGridCell(icon) {
+    const {container} = icon;
+    if (container && !gridAlign.has(container)) {
+        gridAlign.set(container, {
+            x: container.x_align,
+            y: container.y_align,
+        });
+        container.x_align = Clutter.ActorAlign.CENTER;
+        container.y_align = Clutter.ActorAlign.CENTER;
+    }
+
+    // St.Icon centers its texture in the actor. Expanding it makes that
+    // texture sit in the middle of the square hit target.
+    const actor = icon._icon;
+    if (actor && !gridExpand.has(actor)) {
+        gridExpand.set(actor, actor.x_expand);
+        actor.x_expand = true;
+    }
+}
+
+function releaseGridCell(icon) {
+    const {container} = icon;
+    const align = container && gridAlign.get(container);
+    if (align) {
+        container.x_align = align.x;
+        container.y_align = align.y;
+        gridAlign.delete(container);
+    }
+
+    const actor = icon._icon;
+    if (actor && gridExpand.has(actor)) {
+        actor.x_expand = gridExpand.get(actor);
+        gridExpand.delete(actor);
+    }
+}
 
 function panelBox(position) {
     if (position === 'left')
@@ -74,28 +115,40 @@ class AppIndicatorTrayGridButton extends PanelMenu.Button {
         });
         this.add_child(this._chevron);
         this.add_style_class_name('appindicator-tray-grid-button');
+        // .popup-menu is min-width: 15em. Without this the grid floats
+        // in the middle of a menu sized for text rows.
+        this.menu.actor.add_style_class_name('appindicator-tray-grid-menu');
 
         this._gridLayout = new Clutter.GridLayout({
             orientation: Clutter.Orientation.HORIZONTAL,
             column_homogeneous: true,
             row_homogeneous: true,
-            column_spacing: 4,
-            row_spacing: 4,
+            column_spacing: GRID_CELL_SPACING,
+            row_spacing: GRID_CELL_SPACING,
         });
         this._grid = new St.Widget({
             style_class: 'appindicator-tray-grid',
             layout_manager: this._gridLayout,
             x_align: Clutter.ActorAlign.CENTER,
-            x_expand: true,
+            x_expand: false,
+            y_expand: false,
         });
 
         this._tooltipLabel = new St.Label({
             style_class: 'dash-label appindicator-tray-tooltip',
             x_align: Clutter.ActorAlign.CENTER,
-            opacity: 0,
+            visible: false,
         });
         this._tooltipLabel.clutter_text.ellipsize = Pango.EllipsizeMode.END;
         this._tooltipIcon = null;
+        this._tooltipFitId = 0;
+        this._grid.connect('notify::width', () => this._queueTooltipFit());
+        this.connect('destroy', () => {
+            if (this._tooltipFitId) {
+                GLib.source_remove(this._tooltipFitId);
+                this._tooltipFitId = 0;
+            }
+        });
 
         this._emptyLabel = new St.Label({
             text: _('No tray icons'),
@@ -138,12 +191,14 @@ class AppIndicatorTrayGridButton extends PanelMenu.Button {
                 continue;
 
             if (!icon.visible) {
+                releaseGridCell(icon);
                 container.get_parent()?.remove_child(container);
                 continue;
             }
 
             const {column, row} = gridCell(shown, columns);
             container.get_parent()?.remove_child(container);
+            pinToGridCell(icon);
             this._grid.add_child(container);
             this._gridLayout.attach(container, column, row, 1, 1);
             shown += 1;
@@ -152,7 +207,6 @@ class AppIndicatorTrayGridButton extends PanelMenu.Button {
         const empty = shown === 0;
         this._grid.visible = !empty;
         this._emptyLabel.visible = empty;
-        this._tooltipLabel.visible = !empty;
         if (empty || (this._tooltipIcon && !icons.includes(this._tooltipIcon)))
             this.setTooltip(null);
         else if (this._tooltipIcon)
@@ -220,6 +274,7 @@ class AppIndicatorTrayGridButton extends PanelMenu.Button {
     }
 
     unparentFromGrid(icon) {
+        releaseGridCell(icon);
         const parent = icon.container?.get_parent?.();
         if (parent === this._grid)
             parent.remove_child(icon.container);
@@ -230,14 +285,36 @@ class AppIndicatorTrayGridButton extends PanelMenu.Button {
         const text = icon?.accessible_name?.trim?.() || '';
         if (!icon || !text || icon.menu?.isOpen) {
             this._tooltipLabel.text = '';
-            this._tooltipLabel.opacity = 0;
+            this._tooltipLabel.hide();
             if (!icon)
                 this._tooltipIcon = null;
             return;
         }
 
         this._tooltipLabel.text = text;
-        this._tooltipLabel.opacity = 255;
+        this._fitTooltip();
+        this._tooltipLabel.show();
+    }
+
+    _queueTooltipFit() {
+        if (this._tooltipFitId)
+            return;
+
+        // Width changes while the menu is allocating. Fitting immediately
+        // would queue another relayout from inside that allocation.
+        this._tooltipFitId = GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
+            this._tooltipFitId = 0;
+            this._fitTooltip();
+            return GLib.SOURCE_REMOVE;
+        });
+    }
+
+    // A fixed width skips the label's text measurement, which is what
+    // used to force the menu to 220px. Padding stays inside that width.
+    _fitTooltip() {
+        const gridWidth = Math.round(this._grid.width);
+        if (gridWidth > 1)
+            this._tooltipLabel.width = gridWidth;
     }
 
     _closeChildMenus() {
@@ -419,6 +496,7 @@ class IconPlacement {
     }
 
     _reparentToPanel(icon) {
+        releaseGridCell(icon);
         const box = panelBox(this._readString('tray-pos', 'right'));
         const {container} = icon;
         if (!container || container.get_parent() === box)
