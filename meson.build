@@ -53,6 +53,7 @@ endif
 
 install_data(metadata,
     files(js_sources),
+    files('stylesheet.css'),
     install_dir: extension_dir)
 install_data(files('tools/busAnalyzer.js'),
     install_dir: extension_dir / 'tools')
@@ -72,6 +73,10 @@ if gjs.found()
     test('menu-utils',
         gjs,
         args: ['-m', files('tests/testMenuUtils.js')],
+        protocol: 'tap')
+    test('tray-grid-layout',
+        gjs,
+        args: ['-m', files('tests/testTrayGridLayout.js')],
         protocol: 'tap')
 endif
 

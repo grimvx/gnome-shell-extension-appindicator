@@ -653,11 +653,11 @@ const MenuItemFactory = {
             if (NEED_NESTED_SUBMENU_FIX) {
                 // close our own submenus
                 if (menu._openedSubMenu)
-                    menu._openedSubMenu.close(false);
+                    Util.closeMenu(menu._openedSubMenu, false);
 
                 // register ourselves and close sibling submenus
                 if (menu._parent._openedSubMenu && menu._parent._openedSubMenu !== menu)
-                    menu._parent._openedSubMenu.close(true);
+                    Util.closeMenu(menu._parent._openedSubMenu, true);
 
                 menu._parent._openedSubMenu = menu;
             }
@@ -668,7 +668,7 @@ const MenuItemFactory = {
             if (NEED_NESTED_SUBMENU_FIX) {
                 // close our own submenus
                 if (menu._openedSubMenu)
-                    menu._openedSubMenu.close(false);
+                    Util.closeMenu(menu._openedSubMenu, false);
             }
 
             this._dbusItem.handleEvent('closed', null, 0).catch(logError);
@@ -890,7 +890,7 @@ export class Client extends Signals.EventEmitter {
             return;
 
         if (this._openedSubMenu && this._openedSubMenu.isOpen)
-            this._openedSubMenu.close(true);
+            Util.closeMenu(this._openedSubMenu, true);
 
         this._openedSubMenu = submenu;
     }

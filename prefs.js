@@ -22,6 +22,10 @@ const SettingsKey = {
     ICON_CONTRAST: 'icon-contrast',
     TRAY_POS: 'tray-pos',
     CUSTOM_ICONS: 'custom-icons',
+    TRAY_GRID_ENABLED: 'tray-grid-enabled',
+    TRAY_GRID_COLUMNS: 'tray-grid-columns',
+    TRAY_GRID_PINNED: 'tray-grid-pinned',
+    TRAY_GRID_KNOWN: 'tray-grid-known',
 };
 
 export default class DockPreferences extends ExtensionPreferences {

@@ -1,4 +1,5 @@
 prefs.js
 preferences/generalPage.js
 preferences/customIconPage.js
+trayGrid.js
 schemas/org.gnome.shell.extensions.appindicator.gschema.xml

@@ -1,0 +1,26 @@
+/* Tray-grid popup. Panel buttons and dash-label pick up the shell theme. */
+
+.appindicator-tray-grid {
+    padding: 6px;
+}
+
+.appindicator-tray-grid .panel-button {
+    -natural-hpadding: 8px;
+    -minimum-hpadding: 6px;
+    border-radius: 8px;
+    min-width: 2.2em;
+    min-height: 2.2em;
+}
+
+.appindicator-tray-tooltip {
+    width: 220px;
+    height: 28px;
+    margin: 2px 8px 8px;
+    text-align: center;
+}
+
+.appindicator-tray-grid-empty {
+    padding: 12px 16px;
+    text-align: center;
+    font-style: italic;
+}

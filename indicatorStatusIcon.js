@@ -25,10 +25,11 @@ import * as Panel from 'resource:///org/gnome/shell/ui/panel.js';
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 
 import * as AppIndicator from './appIndicator.js';
+import * as DBusMenu from './dbusMenu.js';
 import * as PromiseUtils from './promiseUtils.js';
 import * as SettingsManager from './settingsManager.js';
+import * as TrayGrid from './trayGrid.js';
 import * as Util from './util.js';
-import * as DBusMenu from './dbusMenu.js';
 
 const DEFAULT_ICON_SIZE = Panel.PANEL_ICON_SIZE || 16;
 
@@ -46,32 +47,15 @@ export function addIconToPanel(statusIcon) {
     if (!(statusIcon instanceof BaseStatusIcon))
         throw TypeError(`Unexpected icon type: ${statusIcon}`);
 
-    const settings = SettingsManager.getDefaultGSettings();
-    const indicatorId = `appindicator-${statusIcon.uniqueId}`;
-
-    const currentIcon = Main.panel.statusArea[indicatorId];
-    if (currentIcon) {
-        if (currentIcon !== statusIcon)
-            currentIcon.destroy();
-
-        Main.panel.statusArea[indicatorId] = null;
-    }
-
-    Main.panel.addToStatusArea(indicatorId, statusIcon, 1,
-        settings.get_string('tray-pos'));
-
-    Util.connectSmart(settings, 'changed::tray-pos', statusIcon, () =>
-        addIconToPanel(statusIcon));
+    TrayGrid.addStatusIcon(statusIcon);
 }
 
 export function getTrayIcons() {
-    return Object.values(Main.panel.statusArea).filter(
-        i => i instanceof IndicatorStatusTrayIcon);
+    return TrayGrid.getStatusIcons().filter(i => i instanceof IndicatorStatusTrayIcon);
 }
 
 export function getAppIndicatorIcons() {
-    return Object.values(Main.panel.statusArea).filter(
-        i => i instanceof IndicatorStatusIcon);
+    return TrayGrid.getStatusIcons().filter(i => i instanceof IndicatorStatusIcon);
 }
 
 export const BaseStatusIcon = GObject.registerClass(
@@ -432,8 +416,9 @@ class IndicatorStatusIcon extends BaseStatusIcon {
 
         // if middle mouse button clicked send SecondaryActivate dbus event and do not show appindicator menu
         if (event.get_button() === Clutter.BUTTON_MIDDLE) {
-            if (Main.panel.menuManager.activeMenu)
-                Main.panel.menuManager._closeMenu(true, Main.panel.menuManager.activeMenu);
+            if (this.menu?.isOpen)
+                Util.closeMenu(this.menu, false);
+            this._closeUnrelatedPanelMenus();
             this._indicator.secondaryActivate(event.get_time(), ...event.get_coords());
             return Clutter.EVENT_STOP;
         }
@@ -454,6 +439,24 @@ class IndicatorStatusIcon extends BaseStatusIcon {
         }
 
         return Clutter.EVENT_PROPAGATE;
+    }
+
+    // The tray grid's popup contains these icons. Closing that popup would
+    // unmap the icon, so leave a menu alone when this actor lives inside it.
+    _closeUnrelatedPanelMenus() {
+        const menuManager = Main.panel?.menuManager;
+        const active = menuManager?.activeMenu;
+        if (!active)
+            return;
+
+        const actor = active.actor ?? active;
+        if (typeof actor.contains === 'function' && actor.contains(this))
+            return;
+
+        if (typeof menuManager._closeMenu === 'function')
+            menuManager._closeMenu(true, active);
+        else
+            Util.closeMenu(active, true);
     }
 
     vfunc_scroll_event(event) {
