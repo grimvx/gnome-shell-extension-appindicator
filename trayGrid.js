@@ -17,7 +17,6 @@
 import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
-import Pango from 'gi://Pango';
 import St from 'gi://St';
 
 import {
@@ -39,16 +38,22 @@ import {
 } from './trayGridLayout.js';
 
 const GRID_BUTTON_ROLE = 'appindicator-tray-grid';
-// One value for both axes. Extra horizontal padding used to live only in
-// the panel button, so rows looked tighter than columns.
+// Gap between cells. The cell itself is square, so this is the gap on
+// both axes; panel-button hpadding must not add a second horizontal gap.
 const GRID_CELL_SPACING = 8;
 
 const trackedIcons = new Set();
 const gridAlign = new WeakMap();
 const gridExpand = new WeakMap();
+const gridPad = new WeakMap();
 let placement = null;
 
-function pinToGridCell(icon) {
+function clearButtonPadding(button) {
+    button._minHPadding = 0;
+    button._natHPadding = 0;
+}
+
+function pinToGridCell(icon, size) {
     const {container} = icon;
     if (container && !gridAlign.has(container)) {
         gridAlign.set(container, {
@@ -58,9 +63,23 @@ function pinToGridCell(icon) {
         container.x_align = Clutter.ActorAlign.CENTER;
         container.y_align = Clutter.ActorAlign.CENTER;
     }
+    if (container && size > 0) {
+        container.width = size;
+        container.height = size;
+    }
 
-    // St.Icon centers its texture in the actor. Expanding it makes that
-    // texture sit in the middle of the square hit target.
+    // style-changed re-reads -natural-hpadding from the theme, which is
+    // horizontal only. Pin it at zero or the glyphs sit further apart
+    // sideways than they do between rows.
+    if (!gridPad.has(icon)) {
+        gridPad.set(icon, icon.connect('style-changed', () => {
+            clearButtonPadding(icon);
+        }));
+    }
+    clearButtonPadding(icon);
+
+    // St.Icon centers its texture. Filling the square cell puts that
+    // texture in the middle on both axes.
     const actor = icon._icon;
     if (actor && !gridExpand.has(actor)) {
         gridExpand.set(actor, actor.x_expand);
@@ -75,6 +94,16 @@ function releaseGridCell(icon) {
         container.x_align = align.x;
         container.y_align = align.y;
         gridAlign.delete(container);
+    }
+    if (container) {
+        container.width = -1;
+        container.height = -1;
+    }
+
+    const padId = gridPad.get(icon);
+    if (padId) {
+        icon.disconnect(padId);
+        gridPad.delete(icon);
     }
 
     const actor = icon._icon;
@@ -134,22 +163,6 @@ class AppIndicatorTrayGridButton extends PanelMenu.Button {
             y_expand: false,
         });
 
-        this._tooltipLabel = new St.Label({
-            style_class: 'dash-label appindicator-tray-tooltip',
-            x_align: Clutter.ActorAlign.CENTER,
-            visible: false,
-        });
-        this._tooltipLabel.clutter_text.ellipsize = Pango.EllipsizeMode.END;
-        this._tooltipIcon = null;
-        this._tooltipFitId = 0;
-        this._grid.connect('notify::width', () => this._queueTooltipFit());
-        this.connect('destroy', () => {
-            if (this._tooltipFitId) {
-                GLib.source_remove(this._tooltipFitId);
-                this._tooltipFitId = 0;
-            }
-        });
-
         this._emptyLabel = new St.Label({
             text: _('No tray icons'),
             style_class: 'appindicator-tray-grid-empty',
@@ -159,7 +172,6 @@ class AppIndicatorTrayGridButton extends PanelMenu.Button {
         this._section = new PopupMenu.PopupMenuSection();
         this._section.actor.add_style_class_name('appindicator-tray-grid-section');
         this._section.box.add_child(this._grid);
-        this._section.box.add_child(this._tooltipLabel);
         this._section.box.add_child(this._emptyLabel);
         this.menu.addMenuItem(this._section);
 
@@ -172,10 +184,8 @@ class AppIndicatorTrayGridButton extends PanelMenu.Button {
 
         this.menu.connect('open-state-changed', (_menu, isOpen) => {
             this._chevron.icon_name = isOpen ? 'pan-up-symbolic' : 'pan-down-symbolic';
-            if (!isOpen) {
+            if (!isOpen)
                 this._closeChildMenus();
-                this.setTooltip(null);
-            }
         });
     }
 
@@ -198,7 +208,7 @@ class AppIndicatorTrayGridButton extends PanelMenu.Button {
 
             const {column, row} = gridCell(shown, columns);
             container.get_parent()?.remove_child(container);
-            pinToGridCell(icon);
+            pinToGridCell(icon, this._cellSize());
             this._grid.add_child(container);
             this._gridLayout.attach(container, column, row, 1, 1);
             shown += 1;
@@ -207,12 +217,16 @@ class AppIndicatorTrayGridButton extends PanelMenu.Button {
         const empty = shown === 0;
         this._grid.visible = !empty;
         this._emptyLabel.visible = empty;
-        if (empty || (this._tooltipIcon && !icons.includes(this._tooltipIcon)))
-            this.setTooltip(null);
-        else if (this._tooltipIcon)
-            this.setTooltip(this._tooltipIcon);
 
         return shown;
+    }
+
+    // CSS width on .panel-button only raises the minimum, and hpadding
+    // is added on top of it, so the button ends up wider than it is tall.
+    // One length, applied to both axes of the bin, is the cell the grid uses.
+    _cellSize() {
+        const size = this._grid.get_theme_node().get_length('-cell-size');
+        return size > 0 ? size : 40;
     }
 
     claimMenu(icon) {
@@ -265,12 +279,6 @@ class AppIndicatorTrayGridButton extends PanelMenu.Button {
 
     drop(icon) {
         this._claimed.delete(icon);
-        this.clearTooltipFor(icon);
-    }
-
-    clearTooltipFor(icon) {
-        if (this._tooltipIcon === icon)
-            this.setTooltip(null);
     }
 
     unparentFromGrid(icon) {
@@ -278,43 +286,6 @@ class AppIndicatorTrayGridButton extends PanelMenu.Button {
         const parent = icon.container?.get_parent?.();
         if (parent === this._grid)
             parent.remove_child(icon.container);
-    }
-
-    setTooltip(icon) {
-        this._tooltipIcon = icon;
-        const text = icon?.accessible_name?.trim?.() || '';
-        if (!icon || !text || icon.menu?.isOpen) {
-            this._tooltipLabel.text = '';
-            this._tooltipLabel.hide();
-            if (!icon)
-                this._tooltipIcon = null;
-            return;
-        }
-
-        this._tooltipLabel.text = text;
-        this._fitTooltip();
-        this._tooltipLabel.show();
-    }
-
-    _queueTooltipFit() {
-        if (this._tooltipFitId)
-            return;
-
-        // Width changes while the menu is allocating. Fitting immediately
-        // would queue another relayout from inside that allocation.
-        this._tooltipFitId = GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
-            this._tooltipFitId = 0;
-            this._fitTooltip();
-            return GLib.SOURCE_REMOVE;
-        });
-    }
-
-    // A fixed width skips the label's text measurement, which is what
-    // used to force the menu to 220px. Padding stays inside that width.
-    _fitTooltip() {
-        const gridWidth = Math.round(this._grid.width);
-        if (gridWidth > 1)
-            this._tooltipLabel.width = gridWidth;
     }
 
     _closeChildMenus() {
@@ -385,18 +356,6 @@ class IconPlacement {
         this._inGrid.delete(icon);
         this._button?.drop(icon);
         this._scheduleSync();
-    }
-
-    onHover(icon) {
-        if (this._destroyed || !this._button)
-            return;
-
-        if (!icon.hover || !icon.visible || !this._inGrid.has(icon)) {
-            this._button.clearTooltipFor(icon);
-            return;
-        }
-
-        this._button.setTooltip(icon);
     }
 
     scheduleFromIcon() {
@@ -600,13 +559,7 @@ function watchIcon(icon) {
         placement?.forget(icon);
     });
     icon.connect('notify::visible', () => placement?.scheduleFromIcon());
-    icon.connect('notify::hover', () => placement?.onHover(icon));
     icon.connect('notify::accessible-name', () => placement?.scheduleFromIcon());
-    if (isRealMenu(icon)) {
-        icon.menu.connect('open-state-changed', () => {
-            placement?.onHover(icon);
-        });
-    }
 }
 
 export function enable() {
