@@ -1,26 +1,42 @@
-/* Tray-grid popup. Panel buttons and dash-label pick up the shell theme. */
+/* Tray-grid popup.
+ *
+ * .popup-menu is min-width: 15em, which is what left the icons floating
+ * in a wide menu. This menu sizes to the grid.
+ *
+ * St only treats min-width / min-height as a shrink floor. width and
+ * height raise the natural size, which is what GridLayout actually
+ * uses, so the hit target stays square. Horizontal padding is cleared
+ * because the panel button's hpadding is not matched vertically.
+ */
 
-.appindicator-tray-grid {
-    padding: 6px;
+.popup-menu.appindicator-tray-grid-menu {
+    min-width: 0;
+}
+
+.appindicator-tray-grid-menu .popup-menu-content {
+    padding: 8px;
 }
 
 .appindicator-tray-grid .panel-button {
-    -natural-hpadding: 8px;
-    -minimum-hpadding: 6px;
+    -natural-hpadding: 0px;
+    -minimum-hpadding: 0px;
+    width: 2.75em;
+    height: 2.75em;
     border-radius: 8px;
-    min-width: 2.2em;
-    min-height: 2.2em;
+}
+
+.appindicator-tray-grid .panel-button:hover,
+.appindicator-tray-grid .panel-button:active {
+    background-color: rgba(128, 128, 128, 0.28);
 }
 
 .appindicator-tray-tooltip {
-    width: 220px;
-    height: 28px;
-    margin: 2px 8px 8px;
+    margin-top: 6px;
     text-align: center;
 }
 
 .appindicator-tray-grid-empty {
-    padding: 12px 16px;
+    padding: 4px 8px;
     text-align: center;
     font-style: italic;
 }
