@@ -185,6 +185,25 @@ export function versionCheck(required) {
     return major >= required;
 }
 
+/**
+ * Close a popup menu on every shell version this extension supports.
+ * GNOME Shell 51 replaced the boolean animation flag with `{animate}`.
+ * Passing a boolean there is coerced to an empty object and always animates.
+ *
+ * @param {object} menu Menu with a close() method.
+ * @param {boolean} [animate=true] Whether the close should animate.
+ */
+export function closeMenu(menu, animate = true) {
+    if (!menu?.close)
+        return;
+
+    const [major] = Config.PACKAGE_VERSION.split('.');
+    if (Number.parseInt(major, 10) >= 51)
+        menu.close({animate: !!animate});
+    else
+        menu.close(!!animate);
+}
+
 export function tryCleanupOldIndicators() {
     const indicatorType = BaseStatusIcon;
     const indicators = Object.values(Main.panel.statusArea).filter(i => i instanceof indicatorType);

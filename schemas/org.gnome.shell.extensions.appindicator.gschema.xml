@@ -45,5 +45,26 @@
       <summary>Custom icons</summary>
       <description>Replace any icons with custom icons from themes</description>
     </key>
+    <key name="tray-grid-enabled" type="b">
+      <default>false</default>
+      <summary>Popup tray grid</summary>
+      <description>Show indicator icons in a grid opened from a single top-bar button. While this is off, each icon is shown in the top bar.</description>
+    </key>
+    <key name="tray-grid-columns" type="i">
+      <default>4</default>
+      <range min="1" max="12"/>
+      <summary>Tray grid columns</summary>
+      <description>Number of columns used to lay out icons inside the tray popup.</description>
+    </key>
+    <key name="tray-grid-pinned" type="as">
+      <default>[]</default>
+      <summary>Pinned indicator ids</summary>
+      <description>Unique ids of indicators that stay in the top bar while the popup grid is enabled.</description>
+    </key>
+    <key name="tray-grid-known" type="a(ss)">
+      <default>[]</default>
+      <summary>Known indicators</summary>
+      <description>Pairs of indicator id and label seen while the extension is running. Preferences uses this list to offer pin switches. The extension updates it automatically.</description>
+    </key>
   </schema>
 </schemalist>
