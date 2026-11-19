@@ -37,7 +37,11 @@ import {
     wantsGrid
 } from './trayGridLayout.js';
 
-const GRID_BUTTON_ROLE = 'appindicator-tray-grid';
+// Do not prefix this with "appindicator-". Top Bar Organizer treats that
+// prefix as a KStatusNotifierItem and skips the item when it has no
+// application id, so the chevron never appears in its list. A stable
+// status-area role is what those tools reorder.
+const GRID_BUTTON_ROLE = 'tray-grid';
 // Gap between cells. The cell itself is square, so this is the gap on
 // both axes; panel-button hpadding must not add a second horizontal gap.
 const GRID_CELL_SPACING = 8;
@@ -320,12 +324,13 @@ class IconPlacement {
             existing.destroy();
 
         this._button = new TrayGridButton();
+        this._trayPos = this._readString('tray-pos', 'right');
         try {
             Main.panel.addToStatusArea(
                 GRID_BUTTON_ROLE,
                 this._button,
                 0,
-                this._readString('tray-pos', 'right'));
+                this._trayPos);
 
             const keys = [
                 'tray-grid-enabled',
@@ -414,7 +419,7 @@ class IconPlacement {
             // leaves a gap in the top bar.
             this._button.container.visible = options.gridEnabled;
             this._button.visible = options.gridEnabled;
-            this._placeButton();
+            this._syncButtonPosition();
             this._rebuildMembership(options);
             const shown = this._button.relayout([...this._inGrid], this._columns());
             this._updateAccessibleName(shown);
@@ -465,8 +470,26 @@ class IconPlacement {
         box.insert_child_at_index(container, 1);
     }
 
+    _buttonInPanel() {
+        const parent = this._button.container?.get_parent();
+        return parent === Main.panel._leftBox ||
+            parent === Main.panel._centerBox ||
+            parent === Main.panel._rightBox;
+    }
+
+    // addToStatusArea already registers the button. Moving it on every sync
+    // undoes a reorder from Top Bar Organizer. Only follow tray-pos, or put
+    // the button back if it is no longer in a panel box.
+    _syncButtonPosition() {
+        const trayPos = this._readString('tray-pos', 'right');
+        if (trayPos === this._trayPos && this._buttonInPanel())
+            return;
+        this._trayPos = trayPos;
+        this._placeButton();
+    }
+
     _placeButton() {
-        const box = panelBox(this._readString('tray-pos', 'right'));
+        const box = panelBox(this._trayPos);
         const {container} = this._button;
         if (!container || container.get_parent() === box)
             return;
