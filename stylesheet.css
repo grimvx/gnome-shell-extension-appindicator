@@ -3,10 +3,10 @@
  * .popup-menu is min-width: 15em, which is what left the icons floating
  * in a wide menu. This menu sizes to the grid.
  *
- * St only treats min-width / min-height as a shrink floor. width and
- * height raise the natural size, which is what GridLayout actually
- * uses, so the hit target stays square. Horizontal padding is cleared
- * because the panel button's hpadding is not matched vertically.
+ * -cell-size is read in trayGrid.js and applied to both axes of each
+ * icon's bin. CSS width on .panel-button is only a minimum, and the
+ * button's horizontal padding is not matched vertically, so a stylesheet
+ * width/height pair never produced a square cell.
  */
 
 .popup-menu.appindicator-tray-grid-menu {
@@ -17,22 +17,24 @@
     padding: 8px;
 }
 
+.appindicator-tray-grid {
+    -cell-size: 2.75em;
+}
+
 .appindicator-tray-grid .panel-button {
     -natural-hpadding: 0px;
     -minimum-hpadding: 0px;
-    width: 2.75em;
-    height: 2.75em;
     border-radius: 8px;
+}
+
+.appindicator-tray-grid .system-status-icon {
+    padding: 0;
+    margin: 0;
 }
 
 .appindicator-tray-grid .panel-button:hover,
 .appindicator-tray-grid .panel-button:active {
     background-color: rgba(128, 128, 128, 0.28);
-}
-
-.appindicator-tray-tooltip {
-    margin-top: 6px;
-    text-align: center;
 }
 
 .appindicator-tray-grid-empty {
